@@ -61,7 +61,7 @@ class ApiManager {
     } catch (error) {
       console.error('API request failed:', error);
       return {
-        data: null,
+        data: null as T,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
@@ -177,7 +177,7 @@ export type TableCategory = keyof typeof TABLE_CATEGORIES;
 // Helper function to get category by table name
 export function getCategoryByTable(tableName: string): TableCategory | null {
   for (const [categoryKey, category] of Object.entries(TABLE_CATEGORIES)) {
-    if (category.tables.includes(tableName)) {
+    if (category.tables.includes(tableName as never)) {
       return categoryKey as TableCategory;
     }
   }
@@ -186,5 +186,5 @@ export function getCategoryByTable(tableName: string): TableCategory | null {
 
 // Helper function to get all tables in a category
 export function getTablesInCategory(category: TableCategory): string[] {
-  return TABLE_CATEGORIES[category].tables;
+  return [...TABLE_CATEGORIES[category].tables];
 }
