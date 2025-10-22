@@ -12,8 +12,8 @@ export interface TableColumn {
   name: string;
   type: string;
   nullable: boolean;
-  primaryKey?: boolean;
-  foreignKey?: string;
+  defaultValue?: any;
+  maxLength?: number;
 }
 
 export interface TableSchema {
@@ -21,15 +21,20 @@ export interface TableSchema {
   columns: TableColumn[];
 }
 
-export interface TableData {
+export interface TableDataResponse {
+  success: boolean;
   data: any[];
-  total: number;
-  page: number;
-  limit: number;
+  pagination: {
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
 }
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/admin';
 
 class ApiManager {
   private baseURL: string;
@@ -53,7 +58,14 @@ class ApiManager {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `Request failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // If we can't parse the error response, use the default message
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -74,7 +86,7 @@ class ApiManager {
   }
 
   async getTableSchema(tableName: string): Promise<ApiResponse<TableSchema>> {
-    return this.request<TableSchema>(`/tables/${tableName}/schema`);
+    return this.request<TableSchema>(`/schema/tables/${tableName}/columns`);
   }
 
   async getTableData(
@@ -82,20 +94,20 @@ class ApiManager {
     page: number = 1,
     limit: number = 10,
     filters?: Record<string, any>
-  ): Promise<ApiResponse<TableData>> {
+  ): Promise<ApiResponse<TableDataResponse>> {
     const params = new URLSearchParams({
       page: page.toString(),
       limit: limit.toString(),
       ...(filters && { filters: JSON.stringify(filters) }),
     });
-    return this.request<TableData>(`/tables/${tableName}/data?${params}`);
+    return this.request<TableDataResponse>(`/crud/${tableName}?${params}`);
   }
 
   async createRecord(
     tableName: string,
     data: Record<string, any>
   ): Promise<ApiResponse<any>> {
-    return this.request(`/tables/${tableName}`, {
+    return this.request(`/crud/${tableName}`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -137,7 +149,7 @@ export const TABLE_CATEGORIES = {
   MATCH_INFO: {
     name: 'Match Information',
     description: 'Core match data including competitions, seasons, and matches',
-    tables: ['competitions', 'seasons', 'matches', 'venues', 'match_summary'],
+    tables: ['competition', 'seasons', 'match', 'venues', 'match_summary'],
     icon: 'Trophy',
   },
   PLAYERS: {

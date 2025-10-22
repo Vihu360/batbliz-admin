@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,22 +10,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 // import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { DashboardLayout } from "@/components/dashboard-layout";
-import { apiManager, type TableColumn, type TableData } from "@/lib/api";
+import { apiManager, type TableColumn, type TableDataResponse } from "@/lib/api";
 import { ArrowLeft, Plus, Edit, Trash2, Eye, Search, Filter } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 interface TableManagementProps {
-  params: {
+  params: Promise<{
     category: string;
     table: string;
-  };
+  }>;
 }
 
 export default function TableManagement({ params }: TableManagementProps) {
   const router = useRouter();
-  const { category, table } = params;
+  const { category, table } = use(params);
   
   const [data, setData] = useState<any[]>([]);
   const [columns, setColumns] = useState<TableColumn[]>([]);
@@ -33,7 +33,13 @@ export default function TableManagement({ params }: TableManagementProps) {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
-  const [total, setTotal] = useState(0);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -63,14 +69,36 @@ export default function TableManagement({ params }: TableManagementProps) {
     try {
       const filters = searchTerm ? { search: searchTerm } : undefined;
       const response = await apiManager.getTableData(table, page, limit, filters);
-      if (response.success) {
-        setData(response.data.data);
-        setTotal(response.data.total);
+      console.log('API Response:', response); // Debug log
+      console.log('Response data:', response.data); // Debug log
+      console.log('Is array?', Array.isArray(response.data)); // Debug log
+      
+      if (response.success && response.data) {
+        // The data is directly in response.data, not response.data.data
+        const tableData = Array.isArray(response.data) ? response.data : [];
+        console.log('Setting data to:', tableData); // Debug log
+        setData(tableData);
+        setPagination(response.data.pagination || {
+          page: 1,
+          limit: 10,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        });
+        setError(null); // Clear any previous errors
       } else {
-        setError(response.error || "Failed to load table data");
+        console.log('API call failed:', response.error); // Debug log
+        const errorMsg = response.error || "Failed to load table data";
+        setError(errorMsg);
+        setData([]);
+        toast.error(errorMsg);
       }
     } catch (err) {
-      setError("Failed to load table data");
+      console.error('Error loading table data:', err);
+      const errorMsg = "Failed to load table data";
+      setError(errorMsg);
+      setData([]);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -78,16 +106,44 @@ export default function TableManagement({ params }: TableManagementProps) {
 
   const handleCreate = async () => {
     try {
-      const response = await apiManager.createRecord(table, formData);
+      // Transform form data to match API expectations
+      const transformedData = { ...formData };
+      
+      // Convert snake_case to camelCase for specific fields
+      if (formData.start_date) {
+        transformedData.startDate = formData.start_date;
+        delete transformedData.start_date;
+      }
+      if (formData.end_date) {
+        transformedData.endDate = formData.end_date;
+        delete transformedData.end_date;
+      }
+      if (formData.external_ids) {
+        transformedData.externalIds = formData.external_ids;
+        delete transformedData.external_ids;
+      }
+      if (formData.created_at) {
+        transformedData.createdAt = formData.created_at;
+        delete transformedData.created_at;
+      }
+      if (formData.updated_at) {
+        transformedData.updatedAt = formData.updated_at;
+        delete transformedData.updated_at;
+      }
+      
+      const response = await apiManager.createRecord(table, transformedData);
       if (response.success) {
+        toast.success("Record created successfully!");
         setIsCreateDialogOpen(false);
         setFormData({});
         loadTableData();
       } else {
-        setError(response.error || "Failed to create record");
+        toast.error(response.error || "Failed to create record");
+        // Keep the dialog open on error
       }
     } catch (err) {
-      setError("Failed to create record");
+      toast.error("Failed to create record");
+      // Keep the dialog open on error
     }
   };
 
@@ -95,18 +151,46 @@ export default function TableManagement({ params }: TableManagementProps) {
     if (!selectedRecord) return;
     
     try {
-      const id = selectedRecord[columns.find(col => col.primaryKey)?.name || 'id'];
-      const response = await apiManager.updateRecord(table, id, formData);
+      // Transform form data to match API expectations
+      const transformedData = { ...formData };
+      
+      // Convert snake_case to camelCase for specific fields
+      if (formData.start_date) {
+        transformedData.startDate = formData.start_date;
+        delete transformedData.start_date;
+      }
+      if (formData.end_date) {
+        transformedData.endDate = formData.end_date;
+        delete transformedData.end_date;
+      }
+      if (formData.external_ids) {
+        transformedData.externalIds = formData.external_ids;
+        delete transformedData.external_ids;
+      }
+      if (formData.created_at) {
+        transformedData.createdAt = formData.created_at;
+        delete transformedData.created_at;
+      }
+      if (formData.updated_at) {
+        transformedData.updatedAt = formData.updated_at;
+        delete transformedData.updated_at;
+      }
+      
+      const id = selectedRecord.id;
+      const response = await apiManager.updateRecord(table, id, transformedData);
       if (response.success) {
+        toast.success("Record updated successfully!");
         setIsEditDialogOpen(false);
         setSelectedRecord(null);
         setFormData({});
         loadTableData();
       } else {
-        setError(response.error || "Failed to update record");
+        toast.error(response.error || "Failed to update record");
+        // Keep the dialog open on error
       }
     } catch (err) {
-      setError("Failed to update record");
+      toast.error("Failed to update record");
+      // Keep the dialog open on error
     }
   };
 
@@ -114,15 +198,16 @@ export default function TableManagement({ params }: TableManagementProps) {
     if (!confirm("Are you sure you want to delete this record?")) return;
     
     try {
-      const id = record[columns.find(col => col.primaryKey)?.name || 'id'];
+      const id = record.id;
       const response = await apiManager.deleteRecord(table, id);
       if (response.success) {
+        toast.success("Record deleted successfully!");
         loadTableData();
       } else {
-        setError(response.error || "Failed to delete record");
+        toast.error(response.error || "Failed to delete record");
       }
     } catch (err) {
-      setError("Failed to delete record");
+      toast.error("Failed to delete record");
     }
   };
 
@@ -133,9 +218,13 @@ export default function TableManagement({ params }: TableManagementProps) {
   };
 
   const renderFormField = (column: TableColumn) => {
-    const isRequired = !column.nullable && !column.primaryKey;
+    const isRequired = !column.nullable && column.name !== 'id';
+    const isIdField = column.name === 'id' || column.name.endsWith('_at');
     
-    if (column.type.includes('text') || column.type.includes('varchar')) {
+    // Skip ID fields and timestamp fields for create/edit forms
+    if (isIdField) return null;
+    
+    if (column.type.includes('date') || column.type.includes('timestamp')) {
       return (
         <div key={column.name} className="space-y-2">
           <Label htmlFor={column.name}>
@@ -144,6 +233,7 @@ export default function TableManagement({ params }: TableManagementProps) {
           </Label>
           <Input
             id={column.name}
+            type="date"
             value={formData[column.name] || ''}
             onChange={(e) => setFormData(prev => ({ ...prev, [column.name]: e.target.value }))}
             placeholder={`Enter ${column.name.replace(/_/g, ' ')}`}
@@ -152,25 +242,7 @@ export default function TableManagement({ params }: TableManagementProps) {
       );
     }
     
-    if (column.type.includes('int') || column.type.includes('decimal') || column.type.includes('float')) {
-      return (
-        <div key={column.name} className="space-y-2">
-          <Label htmlFor={column.name}>
-            {column.name.replace(/_/g, ' ').toUpperCase()}
-            {isRequired && <span className="text-red-500 ml-1">*</span>}
-          </Label>
-          <Input
-            id={column.name}
-            type="number"
-            value={formData[column.name] || ''}
-            onChange={(e) => setFormData(prev => ({ ...prev, [column.name]: e.target.value }))}
-            placeholder={`Enter ${column.name.replace(/_/g, ' ')}`}
-          />
-        </div>
-      );
-    }
-    
-    if (column.type.includes('text')) {
+    if (column.type.includes('jsonb')) {
       return (
         <div key={column.name} className="space-y-2">
           <Label htmlFor={column.name}>
@@ -179,10 +251,34 @@ export default function TableManagement({ params }: TableManagementProps) {
           </Label>
           <Textarea
             id={column.name}
+            value={typeof formData[column.name] === 'string' ? formData[column.name] : JSON.stringify(formData[column.name] || {})}
+            onChange={(e) => {
+              try {
+                const parsed = JSON.parse(e.target.value);
+                setFormData(prev => ({ ...prev, [column.name]: parsed }));
+              } catch {
+                setFormData(prev => ({ ...prev, [column.name]: e.target.value }));
+              }
+            }}
+            placeholder={`Enter JSON for ${column.name.replace(/_/g, ' ')}`}
+            rows={3}
+          />
+        </div>
+      );
+    }
+    
+    if (column.type.includes('USER-DEFINED')) {
+      return (
+        <div key={column.name} className="space-y-2">
+          <Label htmlFor={column.name}>
+            {column.name.replace(/_/g, ' ').toUpperCase()}
+            {isRequired && <span className="text-red-500 ml-1">*</span>}
+          </Label>
+          <Input
+            id={column.name}
             value={formData[column.name] || ''}
             onChange={(e) => setFormData(prev => ({ ...prev, [column.name]: e.target.value }))}
             placeholder={`Enter ${column.name.replace(/_/g, ' ')}`}
-            rows={3}
           />
         </div>
       );
@@ -258,7 +354,7 @@ export default function TableManagement({ params }: TableManagementProps) {
                 <DialogTitle>Create New {table.replace(/_/g, ' ')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                {columns.filter(col => !col.primaryKey).map(renderFormField)}
+                {columns.filter(col => col.name !== 'id' && !col.name.endsWith('_at')).map(renderFormField)}
                 <div className="flex gap-2 pt-4">
                   <Button onClick={handleCreate} className="flex-1">
                     Create
@@ -294,19 +390,18 @@ export default function TableManagement({ params }: TableManagementProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {columns.map((column) => (
+                    {columns.filter(col => col.name !== 'id').map((column) => (
                       <TableHead key={column.name} className="capitalize">
                         {column.name.replace(/_/g, ' ')}
-                        {column.primaryKey && <Badge variant="secondary" className="ml-2">PK</Badge>}
                       </TableHead>
                     ))}
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.map((record, index) => (
+                  {data && data.length > 0 ? data.map((record, index) => (
                     <TableRow key={index}>
-                      {columns.map((column) => (
+                      {columns.filter(col => col.name !== 'id').map((column) => (
                         <TableCell key={column.name}>
                           {record[column.name]?.toString() || '-'}
                         </TableCell>
@@ -330,16 +425,16 @@ export default function TableManagement({ params }: TableManagementProps) {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={columns.filter(col => col.name !== 'id').length + 1} className="text-center py-8 text-muted-foreground">
+                        No data found
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
-            
-            {data.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No data found
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -350,7 +445,7 @@ export default function TableManagement({ params }: TableManagementProps) {
               <DialogTitle>Edit {table.replace(/_/g, ' ')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              {columns.filter(col => !col.primaryKey).map(renderFormField)}
+              {columns.filter(col => col.name !== 'id' && !col.name.endsWith('_at')).map(renderFormField)}
               <div className="flex gap-2 pt-4">
                 <Button onClick={handleUpdate} className="flex-1">
                   Update
